@@ -3,7 +3,7 @@ class Kinect():
 	import numpy as np
 	from pylibfreenect2 import Freenect2, SyncMultiFrameListener
 	from pylibfreenect2 import FrameType, Registration, Frame
-	from pylibfreenect2 import OpenGLPacketPipeline
+	from pylibfreenect2 import OpenCLPacketPipeline
 
 	serial = None
 	device = None
@@ -23,7 +23,7 @@ class Kinect():
 		    print("No device connected!")
 		    self.sys.exit(1)
 		self.serial = self.fn.getDeviceSerialNumber(0)
-		self.device = self.fn.openDevice(self.serial, pipeline=self.OpenGLPacketPipeline())
+		self.device = self.fn.openDevice(self.serial, pipeline=self.OpenCLPacketPipeline())
 		types = 0
 		if color: types |= self.FrameType.Color; self.enable_rgb = color
 		if depth: types |= (self.FrameType.Ir | self.FrameType.Depth); self.enable_depth = depth

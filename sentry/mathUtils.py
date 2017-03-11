@@ -32,24 +32,36 @@ def checkLoop(x):
 			#print fix_line
 		p_last = p
 
-def checkHiding(obj,depth_map,tolerance):
-	(r,phi) = obj.speedVector
-	pos_1 = np.array(obj.center)
-	pos_2 = np.array((int(pos_1[0]-r*math.cos(phi)),int(pos_1[1]-r*math.sin(phi))))
-	obj_depth = obj.getPast_depths()[0]
-	line = lineIt(pos_1,pos_2,depth_map.shape)
+def checkHiding(obj,depth_map,tolerance,time_step,points_num):
+	p_t = obj.p_t
 	depth_values = []
-	#print pos_1,pos_2,line
-	for p in line:
-		if depth_map[p[1]-1][p[0]-1] > 0:
-			depth_values.append(depth_map[p[1]-1][p[0]-1])
-			#print depth_map[p[1]-1][p[0]-1]
-	if depth_values != []:
-		if obj_depth-stats.hmean(depth_values)>tolerance: return True
-		else: return False
+	for i in xrange(points_num):
+		p = p_t(time_step*i)
+		if not(p[0]>=0 and p[1]>=0 and p[0]<depth_map.shape[1] and p[1]<depth_map.shape[0]): continue 
+		value = depth_map[p[1]][p[0]]
+		if value not in depth_values and value > 0: depth_values.append(value)
+	if depth_values == []: return False
+	if obj.getPast_depths()[0]-stats.hmean(depth_values)>tolerance: return True
 	return False
 
+#	(r,phi) = obj.speedVector
+#	pos_1 = np.array(obj.center)
+#	pos_2 = np.array((int(pos_1[0]-r*math.cos(phi)),int(pos_1[1]-r*math.sin(phi))))
+#	obj_depth = obj.getPast_depths()[0]
+#	line = lineIt(pos_1,pos_2,depth_map.shape)
+#	depth_values = []
+#	#print pos_1,pos_2,line
+#	for p in line:
+#		if depth_map[p[1]-1][p[0]-1] > 0:
+#			depth_values.append(depth_map[p[1]-1][p[0]-1])
+#			#print depth_map[p[1]-1][p[0]-1]
+#	if depth_values != []:
+#		if obj_depth-stats.hmean(depth_values)>tolerance: return True
+#		else: return False
+#	return False
+
 def checkIfNotInScreen(obj,shape):
+	return False
 	(r,phi) = obj.speedVector
 	pos_1 = obj.center
 	pos_2 = (pos_1[0]-r*math.cos(phi),pos_1[1]-r*math.sin(phi))		
