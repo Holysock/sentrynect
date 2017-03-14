@@ -4,6 +4,7 @@ class IdentifiedObject():
 	import math
 	from collections import deque
 
+	frame_context = None # 1 = ir, 2 = depth, 3 = color, 4 = registiered
 	past_maps = None
 	past_depths = None
 	past_boxes = None
@@ -13,9 +14,10 @@ class IdentifiedObject():
 	name = "Untitled"
 	group = None
 	center = (0,0)
-	p_t = None # stores lambda expression that describes future positions as p(t) = (x,y). Taylor up to max. 2. degree
+	p_t = None # stores lambda expression that predicts future positions as p(t) = (x,y). Taylor up to max. 2. degree
 
-	def __init__(self,obj_map,box,depth,num_past,name):
+	def __init__(self,obj_map,box,depth,num_past,name,context):
+		self.frame_context = context
 		self.center = (int(box[0][0]+float(box[1][0]-box[0][0])/2),int(box[0][1]+float(box[1][1]-box[0][1])/2))		
 		self.past_maps = self.deque(num_past*[self.np.zeros(obj_map.shape,dtype="uint8")],num_past)
 		self.past_depths = self.deque([],num_past)

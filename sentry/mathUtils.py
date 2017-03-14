@@ -4,6 +4,7 @@ import math
 
 def harmonMeanRoi((P1,P2), mat):
 	m = mat[P1[1]:P2[1],P1[0]:P2[0]]
+	#print len(m)
 	m_new = []
 	for r in m:
 		for v in r:
