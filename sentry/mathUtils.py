@@ -1,3 +1,7 @@
+import pycuda.driver as drv
+import pycuda.tools
+import pycuda.autoinit
+from pycuda.compiler import SourceModule
 from scipy import stats
 import numpy as np
 import math
@@ -5,13 +9,41 @@ import math
 def harmonMeanRoi((P1,P2), mat):
 	m = mat[P1[1]:P2[1],P1[0]:P2[0]]
 	#print len(m)
-	m_new = []
-	for r in m:
-		for v in r:
-			if v>0:
-				m_new.append(v)
-	if m_new == []: return -1
-	return int(stats.hmean(m_new))
+	mod = SourceModule("""
+	__global__ void averageWithZeroSupression(float *dataOut, float *dataIn){
+		extern __shared__ float sdata[];
+		const u_int id = threadIdx.x;
+		const u_int zNum_adress = blockDim.x;
+
+		sdata[id] = dataIn[id];
+		if(dataIn[id]==0) atomicAdd(&sdata[zNum_adress], 1);
+
+		__syncthreads();
+		for(int s = 1; s < blockDim.x; s *= 2){
+			u_int index = 2 * s *id;
+			if(index+s<blockDim.x) sdata[index] += sdata[index + s];
+			__syncthreads();
+		}
+		if(id==0){ 
+			u_int n = blockDim.x-sdata[zNum_adress];
+			if(n>0) dataOut[0] = sdata[0]/n; 
+			else dataOut[0] = 0;
+		}
+	}
+	""")
+	avr = mod.get_function("averageWithZeroSupression")
+	m_flat = m.flatten.astype(np.float32)
+	m_avr = np.zeros(1).astype(np.float32)
+	avr(drv.Out(m_avr),drv.In(m_flat),block=(len(m_flat),1,1),grid=(1,1), shared=m_flat.nbytes*2)
+	return int(m_avr[0])
+	
+
+#	for r in m:
+#		for v in r:
+#			if v>0:
+#				m_new.append(v)
+#	if m_new == []: return -1
+#	return int(stats.hmean(m_new))
 
 def getBoxofContour(x):
 	p_max = [[0,0]]

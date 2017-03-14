@@ -126,7 +126,7 @@ while True:
 		obj_map = np.zeros(frame_list[context].shape,dtype=np.uint8)
 		cv2.rectangle(obj_map,P1,P2,255,-1)
 		obj_map = cv2.bitwise_and(obj_map,obj_gobal_map[context])
-		if use_ir and True: obj_HMdepth = mathUtils.harmonMeanRoi((P1,P2),frame_list[DEPTH])
+		if use_ir: obj_HMdepth = mathUtils.harmonMeanRoi((P1,P2),frame_list[DEPTH])
 		else: obj_HMdepth = 0
 		cv2.rectangle(frame_list[context],P1,P2,255, 1)###
 		for obj in obj_list_copy: #finds already existing objects and advances their time
