@@ -5,45 +5,59 @@ from pycuda.compiler import SourceModule
 from scipy import stats
 import numpy as np
 import math
+import time
 
-def harmonMeanRoi((P1,P2), mat):
-	m = mat[P1[1]:P2[1],P1[0]:P2[0]]
-	#print len(m)
-	mod = SourceModule("""
-	__global__ void averageWithZeroSupression(float *dataOut, float *dataIn){
-		extern __shared__ float sdata[];
-		const u_int id = threadIdx.x;
-		const u_int zNum_adress = blockDim.x;
+# cuda kernel in C
+src = SourceModule("""
+__global__ void averageWithZeroSupression(float *dataOut, float *dataIn){
+	extern __shared__ float sdata[];
+	const u_int tid = threadIdx.x;
+	const u_int i = blockIdx.x*blockDim.x+threadIdx.x;
+	const u_int zNum_adress = blockDim.x;
 
-		sdata[id] = dataIn[id];
-		if(dataIn[id]==0) atomicAdd(&sdata[zNum_adress], 1);
+	if(i == 0)sdata[zNum_adress] = 0;  
 
+	sdata[tid] = dataIn[i];
+
+	__syncthreads();
+	if(dataIn[i]==0) atomicAdd(&sdata[zNum_adress], 1);
+	for(int s = 1; s < blockDim.x; s *= 2){
+		u_int index = 2 * s *tid;
+		if(index+s<blockDim.x) sdata[index] += sdata[index + s];
 		__syncthreads();
-		for(int s = 1; s < blockDim.x; s *= 2){
-			u_int index = 2 * s *id;
-			if(index+s<blockDim.x) sdata[index] += sdata[index + s];
-			__syncthreads();
-		}
-		if(id==0){ 
-			u_int n = blockDim.x-sdata[zNum_adress];
-			if(n>0) dataOut[0] = sdata[0]/n; 
-			else dataOut[0] = 0;
-		}
 	}
-	""")
-	avr = mod.get_function("averageWithZeroSupression")
-	m_flat = m.flatten.astype(np.float32)
-	m_avr = np.zeros(1).astype(np.float32)
-	avr(drv.Out(m_avr),drv.In(m_flat),block=(len(m_flat),1,1),grid=(1,1), shared=m_flat.nbytes*2)
-	return int(m_avr[0])
-	
+	if(tid==0){ 
+		u_int n = blockDim.x-sdata[zNum_adress];
+		if(n>0) dataOut[blockIdx.x] = sdata[0]/n; 
+		else dataOut[blockIdx.x] = 0;
+	}
+}
+""")
+avr = src.get_function("averageWithZeroSupression") # kernel function for calculating average of each block in memory
+block_max_size = 1024 #block size depends on gpu
 
-#	for r in m:
-#		for v in r:
-#			if v>0:
-#				m_new.append(v)
-#	if m_new == []: return -1
-#	return int(stats.hmean(m_new))
+#TODO: Explain what is happening here.
+def averageOfRoi((P1,P2), mat):
+	m = mat[P1[1]:P2[1],P1[0]:P2[0]]
+	m_In = np.array(m.flatten(), dtype=np.float32)
+	arr_length = len(m_In)
+	if arr_length == 0: return 0
+
+	block_number = int(arr_length/block_max_size) + (arr_length % block_max_size > 0) #number of blocks needed
+	thread_number = arr_length if arr_length<=block_max_size else block_max_size #number of threads
+
+	if block_number > 1 and arr_length % block_max_size != 0: 
+		block_filler = np.zeros(block_max_size - (arr_length % block_max_size), dtype=np.float32)
+		m_In = np.concatenate([m_In,block_filler])
+
+	m_Out = np.zeros(block_number).astype(np.float32)
+	avr(drv.Out(m_Out),drv.In(m_In),block=(thread_number,1,1),grid=(block_number,1), shared=int(m_In.nbytes/block_number)+8)
+	if block_number == 1: return m_Out[0]
+
+	m_Final = np.zeros(1).astype(np.float32)
+	avr(drv.Out(m_Final),drv.In(m_Out),block=(len(m_Out),1,1),grid=(1,1), shared=m_Out.nbytes+8)
+	return m_Final[0]
+
 
 def getBoxofContour(x):
 	p_max = [[0,0]]
@@ -76,22 +90,6 @@ def checkHiding(obj,depth_map,tolerance,time_step,points_num):
 	if depth_values == []: return False
 	if obj.getPast_depths()[0]-stats.hmean(depth_values)>tolerance: return True
 	return False
-
-#	(r,phi) = obj.speedVector
-#	pos_1 = np.array(obj.center)
-#	pos_2 = np.array((int(pos_1[0]-r*math.cos(phi)),int(pos_1[1]-r*math.sin(phi))))
-#	obj_depth = obj.getPast_depths()[0]
-#	line = lineIt(pos_1,pos_2,depth_map.shape)
-#	depth_values = []
-#	#print pos_1,pos_2,line
-#	for p in line:
-#		if depth_map[p[1]-1][p[0]-1] > 0:
-#			depth_values.append(depth_map[p[1]-1][p[0]-1])
-#			#print depth_map[p[1]-1][p[0]-1]
-#	if depth_values != []:
-#		if obj_depth-stats.hmean(depth_values)>tolerance: return True
-#		else: return False
-#	return False
 
 def checkIfNotInScreen(obj,shape):
 	return False
@@ -155,4 +153,28 @@ def lineIt(P1, P2,shape):
 	itbuffer = itbuffer[(colX >= 0) & (colY >=0) & (colX<imageW) & (colY<imageH)]
 
 	return itbuffer.astype(int)
+
+###################################################################################################
+
+
+#	dt1 = time.time()-t0
+#	t0 = time.time()		
+
+#	m_new = []
+#	for r in m:
+#		for v in r:
+#			if v>0:
+#				m_new.append(v)
+#	if m_new == []: return -1
+
+#	dt2 = time.time()-t0
+#	print dt1, dt2
+
+#	return int(stats.hmean(m_new))
+
+
+#	if abs(m_avr[0]-stats.hmean(m_new)) > 20: 
+#		print m_flat
+#		print arr_length, m_avr, stats.hmean(m_new)#, m_avr[0]-stats.hmean(m_new)
+#		sys.exit(5)
 
