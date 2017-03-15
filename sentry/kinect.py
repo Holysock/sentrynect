@@ -3,7 +3,7 @@ class Kinect():
 	import numpy as np
 	from pylibfreenect2 import Freenect2, SyncMultiFrameListener
 	from pylibfreenect2 import FrameType, Registration, Frame
-	from pylibfreenect2 import OpenCLPacketPipeline
+	from pylibfreenect2 import OpenCLPacketPipeline # OpenGLPacketPipeline, CudaPacketPipeline, CpuPacketPipeline
 
 	serial = None
 	device = None
