@@ -2,11 +2,9 @@ from collections import deque
 import numpy as np
 import argparse
 import time
-import math
 import copy
 import cv2
 import sys
-#lol
 import trackerUtils as tracker
 import identifiedObject
 import mathUtils
@@ -35,7 +33,7 @@ if show and"contours" in show: show_contours = True
 
 if use == "color": use_color = True
 elif use == "ir": use_ir = True
-elif use == "both": use_color = True; use_depth = True
+elif use == "both": use_color = True; use_ir = True
 else:
 	print "unknown argument for ""--use"": "+use
 	sys.exit(1)
@@ -49,6 +47,7 @@ if args.fps:
 	fpsCountMAX = 10
 	fpsCount = 0
 	fps_t = time.clock()
+	fps_string = "0"
 
 
 #########################################################################
@@ -79,7 +78,7 @@ while True:
 	if use_ir: frame_list[IR] = kinect.getFrame("ir")
 	if use_ir: frame_list[DEPTH] = kinect.getFrame("depth")
 	if use_color: frame_list[COLOR] = kinect.getFrame("color")
-	if use_color and use_depth: frame_list[REGISTERED] = kinect.getFrame("registered")
+	if use_color and use_ir: frame_list[REGISTERED] = kinect.getFrame("registered")
 	kinect.releaseFrame()
 
 ##############################################################################
@@ -88,7 +87,7 @@ while True:
 	obj_contours = []
 	if use_ir: 
 		if track_refl: obj_contours, obj_gobal_map[IR] = tracker.findColoredObjects(obj_contours,frame_list[IR],230,255,3,3,IR) #finds simple objects wich satisfy certain criteria in a given frame
-		if track_hum_ir: pass 
+		if track_hum_ir: pass #TODO: Implement pedestrian / human tracker 
 		if track_hum_depth: pass
 	if use_color:
 		if track_hum_color: pass
@@ -126,7 +125,7 @@ while True:
 		obj_map = np.zeros(frame_list[context].shape,dtype=np.uint8)
 		cv2.rectangle(obj_map,P1,P2,255,-1)
 		obj_map = cv2.bitwise_and(obj_map,obj_gobal_map[context])
-		if use_ir: obj_HMdepth = mathUtils.harmonMeanRoi((P1,P2),frame_list[DEPTH])
+		if use_ir: obj_HMdepth = mathUtils.averageOfRoi((P1,P2),frame_list[DEPTH])
 		else: obj_HMdepth = 0
 		cv2.rectangle(frame_list[context],P1,P2,255, 1)###
 		for obj in obj_list_copy: #finds already existing objects and advances their time
@@ -157,8 +156,8 @@ while True:
 				print "Found hiding object {0}.".format(obj.name) ###
 				break
 		if ex_flag: continue 
-		# if current object is not an existing, missing or hiding known one, its a new one.
-		obj_list.appendleft(identifiedObject.IdentifiedObject(obj_map,(P1,P2),obj_HMdepth,num_past,"0",context))#mathUtils.giveName("simple"
+		# if current object is existing, missing or hiding, then its a new one.
+		obj_list.appendleft(identifiedObject.IdentifiedObject(obj_map,(P1,P2),obj_HMdepth,num_past,"0",context))#TODO: Implement dynamic and context related naming
 		print "Found a new object. Name: {0}, Context: {1}".format(0,context) ###
 		cv2.rectangle(frame_list[context],P1,P2,255, -1) ###
 
@@ -176,9 +175,15 @@ while True:
 
 	if show_contours: 
 		for contour in obj_contours: cv2.drawContours(frame_list[contour[1]], [contour[0]], -1, 255, 1)
-	if show_color and use_color: cv2.imshow("color", cv2.resize(frame_list[COLOR],(int(1920/3),int(1080/3))))
-	if show_ir and use_ir: cv2.imshow("IR", frame_list[IR])
-	if show_depth and use_ir: cv2.imshow("depth", frame_list[DEPTH])
+	if show_color and use_color:
+		if args.fps: cv2.putText(frame_list[COLOR],fps_string, (0,25), cv2.FONT_HERSHEY_SIMPLEX, 1, 255)
+		cv2.imshow("color", cv2.resize(frame_list[COLOR],(int(1920/3),int(1080/3))))
+	if show_ir and use_ir: 
+		if args.fps: cv2.putText(frame_list[IR],fps_string, (0,25), cv2.FONT_HERSHEY_SIMPLEX, 1, 255)
+		cv2.imshow("IR", frame_list[IR])
+	if show_depth and use_ir: 
+		if args.fps: cv2.putText(frame_list[DEPTH],fps_string, (0,25), cv2.FONT_HERSHEY_SIMPLEX, 1, 255)
+		cv2.imshow("depth", frame_list[DEPTH])
 	if show_registered and use_color and use_ir: cv2.imshow("registered", frame_list[REGISTERED])
 
 	# simple fps counter. Derives loop-counts by the time : dcount/dt
@@ -187,7 +192,8 @@ while True:
 			fpsCount += 1
 		else:
 			fps_dt = time.clock()-fps_t
-			print("FPS: {0}" .format(int(fpsCount/float(fps_dt))))
+			#print("FPS: {0}" .format(int(fpsCount/float(fps_dt))))
+			fps_string = str(int(fpsCount/float(fps_dt)))
 			fpsCount = 0
 			fps_t = time.clock()
 
